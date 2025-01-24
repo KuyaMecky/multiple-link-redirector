@@ -3,7 +3,7 @@
 Plugin Name: Multiple Link Redirector
 Plugin URI: https://github.com/KuyaMecky/multiple-link-redirector
 Description: Manage multiple link redirections with a modern, user-friendly admin interface
-Version: 1.1
+Version: 1.2
 Author: MeckyMouse
 Author URI: https://github.com/KuyaMecky
 */
@@ -17,15 +17,14 @@ class MultiLinkRedirector {
         add_action('admin_init', [$this, 'register_settings']);
         add_action('template_redirect', [$this, 'perform_redirects']);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_scripts']);
-        add_action('wp_ajax_mlr_edit_redirect', [$this, 'ajax_edit_redirect']);
-        add_action('wp_ajax_mlr_delete_redirect', [$this, 'ajax_delete_redirect']);
+        add_action('wp_ajax_mlr_save_redirects', [$this, 'ajax_save_redirects']);
     }
 
     public function enqueue_admin_scripts($hook) {
         if ($hook !== 'toplevel_page_link-redirector') return;
 
-        wp_enqueue_style('mlr-admin-style', plugin_dir_url(__FILE__) . 'assets/admin-style.css');
-        wp_enqueue_script('mlr-admin-script', plugin_dir_url(__FILE__) . 'assets/admin-script.js', ['jquery'], '1.1', true);
+        wp_enqueue_style('mlr-admin-style', plugin_dir_url(__FILE__) . 'admin-style.css');
+        wp_enqueue_script('mlr-admin-script', plugin_dir_url(__FILE__) . 'admin-script.js', ['jquery'], '1.2', true);
         wp_localize_script('mlr-admin-script', 'mlrAjax', [
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce($this->nonce_action)
@@ -45,82 +44,68 @@ class MultiLinkRedirector {
     }
 
     public function register_settings() {
-        register_setting($this->option_name, $this->option_name, [$this, 'sanitize_redirects']);
+        register_setting(
+            $this->option_name, 
+            $this->option_name, 
+            [
+                'type' => 'array',
+                'sanitize_callback' => [$this, 'sanitize_redirects']
+            ]
+        );
     }
 
     public function sanitize_redirects($input) {
         $new_input = [];
-        if (is_array($input)) {
-            foreach ($input as $key => $redirect) {
-                if (!empty($redirect['original']) && !empty($redirect['target'])) {
-                    $new_input[] = [
-                        'original' => sanitize_text_field($redirect['original']),
-                        'target' => sanitize_text_field($redirect['target'])
-                    ];
-                }
+        
+        if (!is_array($input)) {
+            return $new_input;
+        }
+
+        foreach ($input as $key => $redirect) {
+            // Ensure both original and target URLs are not empty
+            if (!empty($redirect['original']) && !empty($redirect['target'])) {
+                $new_input[] = [
+                    'original' => esc_url_raw($redirect['original']),
+                    'target' => esc_url_raw($redirect['target'])
+                ];
             }
         }
+
         return $new_input;
     }
 
-    public function ajax_edit_redirect() {
+    public function ajax_save_redirects() {
+        // Security checks
         check_ajax_referer($this->nonce_action, 'nonce');
-
+        
         if (!current_user_can('manage_options')) {
             wp_send_json_error('Unauthorized');
         }
 
-        $index = intval($_POST['index']);
-        $original = sanitize_text_field($_POST['original']);
-        $target = sanitize_text_field($_POST['target']);
+        // Retrieve and sanitize input
+        $redirects = isset($_POST['redirects']) ? stripslashes_deep($_POST['redirects']) : [];
+        
+        // Sanitize and validate redirects
+        $sanitized_redirects = $this->sanitize_redirects($redirects);
 
-        $redirects = get_option($this->option_name, []);
+        // Update option
+        $result = update_option($this->option_name, $sanitized_redirects);
 
-        if (isset($redirects[$index])) {
-            $redirects[$index] = [
-                'original' => $original,
-                'target' => $target
-            ];
-
-            update_option($this->option_name, $redirects);
-            wp_send_json_success($redirects);
+        if ($result) {
+            wp_send_json_success($sanitized_redirects);
+        } else {
+            wp_send_json_error('Failed to save redirects');
         }
-
-        wp_send_json_error('Redirect not found');
-    }
-
-    public function ajax_delete_redirect() {
-        check_ajax_referer($this->nonce_action, 'nonce');
-
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error('Unauthorized');
-        }
-
-        $index = intval($_POST['index']);
-        $redirects = get_option($this->option_name, []);
-
-        if (isset($redirects[$index])) {
-            unset($redirects[$index]);
-            $redirects = array_values($redirects);
-            update_option($this->option_name, $redirects);
-            wp_send_json_success($redirects);
-        }
-
-        wp_send_json_error('Redirect not found');
     }
 
     public function admin_page_html() {
+        $redirects = get_option($this->option_name, []);
         ?>
-        <div class="mlr-container">
-            <div class="mlr-header">
-                <h1>Link Redirector</h1>
-                <button id="add-redirect-btn" class="mlr-button primary">
-                    <span class="dashicons dashicons-plus"></span> Add New Redirect
-                </button>
-            </div>
-
-            <div class="mlr-table-container">
-                <table class="mlr-table" id="redirects-table">
+        <div class="wrap">
+            <h1>Multiple Link Redirector</h1>
+            <form id="redirects-form">
+                <?php wp_nonce_field($this->nonce_action, 'mlr_nonce'); ?>
+                <table class="wp-list-table widefat fixed striped">
                     <thead>
                         <tr>
                             <th>Original URL</th>
@@ -128,54 +113,110 @@ class MultiLinkRedirector {
                             <th>Actions</th>
                         </tr>
                     </thead>
-                    <tbody id="redirect-rows">
-                        <?php 
-                        $redirects = get_option($this->option_name, []);
-                        foreach ($redirects as $index => $redirect): 
-                        ?>
-                        <tr data-index="<?php echo $index; ?>">
-                            <td class="original-url"><?php echo esc_html($redirect['original']); ?></td>
-                            <td class="target-url"><?php echo esc_html($redirect['target']); ?></td>
-                            <td class="actions">
-                                <button class="mlr-button edit-redirect" data-index="<?php echo $index; ?>">
-                                    <span class="dashicons dashicons-edit"></span>
-                                </button>
-                                <button class="mlr-button delete-redirect" data-index="<?php echo $index; ?>">
-                                    <span class="dashicons dashicons-trash"></span>
-                                </button>
+                    <tbody id="redirects-list">
+                        <?php foreach ($redirects as $index => $redirect): ?>
+                        <tr>
+                            <td>
+                                <input type="text" 
+                                    name="redirects[<?php echo $index; ?>][original]" 
+                                    value="<?php echo esc_attr($redirect['original']); ?>" 
+                                    class="widefat"
+                                >
+                            </td>
+                            <td>
+                                <input type="text" 
+                                    name="redirects[<?php echo $index; ?>][target]" 
+                                    value="<?php echo esc_attr($redirect['target']); ?>" 
+                                    class="widefat"
+                                >
+                            </td>
+                            <td>
+                                <button type="button" class="button remove-redirect">Remove</button>
                             </td>
                         </tr>
                         <?php endforeach; ?>
                     </tbody>
                 </table>
-            </div>
-
-            <!-- Modal for Add/Edit Redirect -->
-            <div id="redirect-modal" class="mlr-modal">
-                <div class="mlr-modal-content">
-                    <span class="mlr-close-modal">&times;</span>
-                    <h2 id="modal-title">Add New Redirect</h2>
-                    <form id="redirect-form">
-                        <input type="hidden" id="redirect-index" name="index" value="-1">
-                        <div class="mlr-form-group">
-                            <label for="original-url">Original URL</label>
-                            <input type="text" id="original-url" name="original" required>
-                        </div>
-                        <div class="mlr-form-group">
-                            <label for="target-url">Target URL</label>
-                            <input type="text" id="target-url" name="target" required>
-                        </div>
-                        <div class="mlr-form-actions">
-                            <button type="submit" class="mlr-button primary">Save Redirect</button>
-                            <button type="button" class="mlr-button secondary mlr-close-modal">Cancel</button>
-                        </div>
-                    </form>
+                <div class="actions">
+                    <button type="button" id="add-redirect" class="button button-primary">Add Redirect</button>
+                    <button type="submit" id="save-redirects" class="button button-secondary">Save Redirects</button>
                 </div>
-            </div>
+            </form>
         </div>
-
         <script>
-        // JavaScript will be in a separate file (assets/admin-script.js)
+        jQuery(document).ready(function($) {
+            let redirectIndex = <?php echo count($redirects); ?>;
+
+            // Add new redirect row
+            $('#add-redirect').on('click', function() {
+                const newRow = `
+                    <tr>
+                        <td>
+                            <input type="text" 
+                                name="redirects[${redirectIndex}][original]" 
+                                class="widefat"
+                            >
+                        </td>
+                        <td>
+                            <input type="text" 
+                                name="redirects[${redirectIndex}][target]" 
+                                class="widefat"
+                            >
+                        </td>
+                        <td>
+                            <button type="button" class="button remove-redirect">Remove</button>
+                        </td>
+                    </tr>
+                `;
+                $('#redirects-list').append(newRow);
+                redirectIndex++;
+            });
+
+            // Remove redirect row
+            $(document).on('click', '.remove-redirect', function() {
+                $(this).closest('tr').remove();
+            });
+
+            // Save redirects via AJAX
+            $('#redirects-form').on('submit', function(e) {
+                e.preventDefault();
+                
+                const formData = $(this).serializeArray();
+                const redirects = [];
+
+                // Organize form data into redirects array
+                for (let i = 0; i < formData.length; i += 3) {
+                    if (formData[i].name.includes('[original]') && 
+                        formData[i+1].name.includes('[target]')) {
+                        redirects.push({
+                            original: formData[i].value,
+                            target: formData[i+1].value
+                        });
+                    }
+                }
+
+                $.ajax({
+                    url: ajaxurl,
+                    method: 'POST',
+                    data: {
+                        action: 'mlr_save_redirects',
+                        nonce: $('#mlr_nonce').val(),
+                        redirects: redirects
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            alert('Redirects saved successfully!');
+                            location.reload();
+                        } else {
+                            alert('Failed to save redirects: ' + response.data);
+                        }
+                    },
+                    error: function() {
+                        alert('An error occurred while saving redirects.');
+                    }
+                });
+            });
+        });
         </script>
         <?php
     }
@@ -204,7 +245,7 @@ class MultiLinkRedirector {
     }
 }
 
-// Plugin initialization
+// Initialize the plugin
 add_action('plugins_loaded', function() {
     new MultiLinkRedirector();
 });
