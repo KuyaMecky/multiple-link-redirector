@@ -1,0 +1,111 @@
+/* Admin Styles for Multiple Link Redirector */
+.mlr-container {
+    background: #fff;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.mlr-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.mlr-button {
+    padding: 8px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.mlr-button.primary {
+    background-color: #007cba;
+    color: white;
+    border: none;
+}
+
+.mlr-button.secondary {
+    background-color: #f8f9fa;
+    border: 1px solid #ddd;
+}
+
+.mlr-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.mlr-table th {
+    background-color: #f1f3f4;
+    font-weight: 600;
+    padding: 12px;
+    text-align: left;
+}
+
+.mlr-table td {
+    padding: 12px;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.actions .dashicons {
+    color: #6c757d;
+}
+
+.mlr-modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.4);
+}
+
+.mlr-modal-content {
+    background-color: #fefefe;
+    margin: 15% auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%;
+    max-width: 500px;
+    border-radius: 8px;
+}
+
+.mlr-form-group {
+    margin-bottom: 15px;
+}
+
+.mlr-form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 600;
+}
+
+.mlr-form-group input {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.mlr-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.mlr-close-modal {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
