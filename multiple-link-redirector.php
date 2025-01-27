@@ -28,6 +28,8 @@ class MultiLinkRedirector {
         );
     }
 
+    
+
     public function register_settings() {
         register_setting($this->option_name, $this->option_name, [
             'type' => 'array',

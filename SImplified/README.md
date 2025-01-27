@@ -15,6 +15,7 @@ The External Link Redirect plugin allows you to redirect specific external links
 ```php
 $redirects = [
     'https://shorturl.at/KaDb8' => 'https://82bet.com/#/register?invitationCode=668323190180',
+    'https://shorturl.at/9QY4l' => 'https://82bet.com/#/register?invitationCode=112114616593' 
     // Add more redirects here.
 ];
 ```
